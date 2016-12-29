@@ -2,19 +2,39 @@ from math import sqrt
 import numpy as np
 import random
 
+#let's define some basic functions. Even though I am not using anything besides sigmoid function
+#, I have defined the softmax and the derivative 
+
+#let's define some basic functions. Even though I am not using anything besides sigmoid function
+#, I have defined the softmax and the derivative 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def sigmoid_derivative(x):
-    return sigmoid(x)(1-sigmoid(x))
+def ReLU(x):
+    return (x>0)*x
+
+def identity(x):
+    return x
+
+def identity_derivative(x):
+    return 1
 
 
-def softmax(x):
-    return np.exp(x)/sum(np.exp(x))
+def sigmoid_derivative(sigmoid_x):
+    return sigmoid_x*(1-sigmoid_x)
+
+def tanh_derivative(x):
+    return 1-x**2
 
 def derivative(f):
     if f == sigmoid:
         return sigmoid_derivative
+    elif f == np.tanh:
+        return tanh_derivative
+    elif f == identity:
+        return identity_derivative
+    else:
+        return None
 
 class bornaMLP:
     def __init__(self,layers_sizes, activations , batch_size=10, eta=0.05, epocs=1000, update='online', minibatch_percentage=0.1, verbose=True):
@@ -39,15 +59,15 @@ class bornaMLP:
             W[str(i)+"-"+str(i+1)] = np.random.uniform(-upper,upper, self.layers_sizes[i:i+2])#np.ones( self.layers_sizes[i:i+2])
         return W,B
     
-    def feed_forward(self,x): #feed forward
-        x = np.array(x)
-        ffr=[x]#Feed Forward Result
+    def feed_forward(self,X): #feed forward
+        X = np.array(X)
+        ffr=[X]#Feed Forward Result
         for i in range(self.num_layers-1):
-            w = self.W[str(i)+"-"+str(i+1)]
-            b= self.B[str(i)+"-"+str(i+1)]
-            y = self.activations[i](np.dot(x,w) +b ) #clculate the output of the layer
-            x=y
-            ffr.append(y)
+            W = self.W[str(i)+"-"+str(i+1)]
+            B = self.B[str(i)+"-"+str(i+1)]
+            Y = self.activations[i](np.dot(X,W) + B ) #clculate the output of the layer
+            X=Y
+            ffr.append(Y)
         return ffr
     
     def _calc_error(self,X,Y):
@@ -58,10 +78,10 @@ class bornaMLP:
         self.W , self.B= self.generate_random_weights()
         X=np.array(X)
         Y=np.array(Y)
-        self.errors.append(self._calc_error(X,Y))
-
+        
+        self.errors.append(self._calc_error(X,Y))# Error before we start training        
         for i in range(self.epocs):
-            if not self.verbose:
+            if self.verbose:
                 if i<10:
                     print ("epoc->",i+1)
                 elif i<100 and i%10==0:
@@ -77,6 +97,7 @@ class bornaMLP:
                 for j in range(X.shape[0]):
                     delta_W, delta_B = self.calc_weight_updates(X[j,:],Y[j])
                     self.update_weights(delta_W, delta_B)
+                    
             elif self.update == 'batch' or 'stochastic-mini-batch':
                 if self.update == 'batch':
                     this_batch=X
@@ -97,7 +118,7 @@ class bornaMLP:
                         else:
                             sum_delta_W[k] = delta_W[k]
                             sum_delta_B[k] = delta_B[k]
-					
+
                 self.update_weights(sum_delta_W, sum_delta_B)
                 
             self.errors.append(self._calc_error(X,Y))
@@ -124,7 +145,10 @@ class bornaMLP:
         this_output = ffr[-1]
         previous_output = ffr[-2]
 
-        this_delta = ((this_output - target)) * (this_output * (1-this_output))
+        #this_delta = ((this_output - target)) * (this_output * (1-this_output))
+        act_deriv = derivative(self.activations[self.num_layers-2])
+        this_delta = ((this_output - target)) * act_deriv(this_output) 
+
         weight_chagnge = np.outer(previous_output , this_delta)
         
         delta_W[str(self.num_layers-2)+"-"+str(self.num_layers-1)] = self.eta * weight_chagnge
@@ -134,11 +158,13 @@ class bornaMLP:
         for i in reversed(range(1,self.num_layers-1)): # Going through all the layers backwards
             next_layer_delta = this_delta
             
-            hl_output = ffr[i]
             hl_input = ffr[i-1]
+            hl_output = ffr[i]
             hl_out_weights = self.W[str(i)+"-"+str(i+1)]
+            #this_delta =np.dot(hl_out_weights, next_layer_delta) * hl_output *(1-hl_output)
+            act_deriv = derivative(self.activations[i-1])
+            this_delta =np.dot(hl_out_weights, next_layer_delta) * act_deriv(hl_output)
             
-            this_delta =np.dot(hl_out_weights, next_layer_delta) * hl_output *(1-hl_output)
             weight_chagnge = np.outer(hl_input,this_delta)
             delta_W[str(i-1)+"-"+str(i)] = self.eta* weight_chagnge     
             delta_B[str(i-1)+"-"+str(i)] = self.eta* this_delta
